@@ -26,6 +26,7 @@
 #include "trace.h"
 
 #include "elantp.h"
+#include "gesturerec.h"
 
 //
 // Forward Declarations
@@ -94,7 +95,7 @@ struct _DEVICE_CONTEXT
 
 	ULONGLONG LastInterruptTime;
 
-	elan_softc sc;
+	csgesture_softc sc;
 
 	uint8_t lastreport[ETP_MAX_REPORT_LEN];
 };
