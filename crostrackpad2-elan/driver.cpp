@@ -14,6 +14,8 @@ void ElanTimerFunc(_In_ WDFTIMER hTimer);
 #define NT_DEVICE_NAME      L"\\Device\\ELANTP"
 #define DOS_DEVICE_NAME     L"\\DosDevices\\ELANTP"
 
+#define MAX_FINGERS 5
+
 //#include "driver.tmh"
 
 NTSTATUS
@@ -596,8 +598,8 @@ void ProcessGesture(PDEVICE_CONTEXT pDevice, csgesture_softc *sc) {
 	sc->dy = 0;
 
 #pragma mark process touch thresholds
-	int avgx[15];
-	int avgy[15];
+	int avgx[MAX_FINGERS];
+	int avgy[MAX_FINGERS];
 
 	int abovethreshold = 0;
 	int recentlyadded = 0;
@@ -605,12 +607,12 @@ void ProcessGesture(PDEVICE_CONTEXT pDevice, csgesture_softc *sc) {
 	int a = 0;
 
 	int nfingers = 0;
-	for (int i = 0;i < 15;i++) {
+	for (int i = 0;i < MAX_FINGERS;i++) {
 		if (sc->x[i] != -1)
 			nfingers++;
 	}
 
-	for (int i = 0;i < 15;i++) {
+	for (int i = 0;i < MAX_FINGERS;i++) {
 		if (sc->truetick[i] < 30 && sc->truetick[i] != 0)
 			recentlyadded++;
 		if (sc->tick[i] == 0)
@@ -683,7 +685,7 @@ void ProcessGesture(PDEVICE_CONTEXT pDevice, csgesture_softc *sc) {
 #pragma mark shift to last
 	int releasedfingers = 0;
 
-	for (int i = 0;i < 15;i++) {
+	for (int i = 0;i < MAX_FINGERS;i++) {
 		if (sc->x[i] != -1) {
 			/*if (sc->ticksincelastrelease < 25 && !sc->mouseDownDueToTap) {
 			sc->mouseDownDueToTap = true;
