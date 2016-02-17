@@ -813,11 +813,12 @@ void TrackpadRawInput(PDEVICE_CONTEXT pDevice, struct csgesture_softc *sc, uint8
 			pressure = finger_data[4];
 
 			//map to cypress coordinates
-			pos_y = 1500 - pos_y;
+			//pos_y = 1500 - pos_y;
 			pos_x *= 2;
 			pos_x /= 7;
 			pos_y *= 2;
 			pos_y /= 7;
+			pos_y = 10000 - pos_y;
 
 
 			/*
