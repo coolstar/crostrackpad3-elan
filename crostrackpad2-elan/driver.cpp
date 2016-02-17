@@ -376,6 +376,7 @@ IN WDFWORKITEM  WorkItem
 	csgesture_softc sc = pDevice->sc;
 	TrackpadRawInput(pDevice, &sc, report2, 1);
 	pDevice->sc = sc;
+	WdfObjectDelete(WorkItem);
 }
 
 void ElanTimerFunc(_In_ WDFTIMER hTimer){
