@@ -245,7 +245,7 @@ IN ULONG        IoControlCode
 #define DBG_PNP   2
 #define DBG_IOCTL 4
 
-#if 1
+#if 0
 #define ElanPrint(dbglevel, dbgcatagory, fmt, ...) {          \
     if (ElanPrintDebugLevel >= dbglevel &&                         \
         (ElanPrintDebugCatagories && dbgcatagory))                 \
