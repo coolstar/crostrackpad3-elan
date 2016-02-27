@@ -61,6 +61,11 @@
 #define ETP_HOVER_INFO_OFFSET	30
 #define ETP_MAX_REPORT_LEN	34
 
+enum tp_mode {
+	IAP_MODE = 1,
+	MAIN_MODE
+};
+
 struct elan_softc {
 	uint32_t x;
 	uint32_t y;

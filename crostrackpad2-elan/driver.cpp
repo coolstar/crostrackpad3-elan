@@ -368,7 +368,9 @@ IN WDFWORKITEM  WorkItem
 	if (report[0] != 0xff){
 		for (int i = 0; i < ETP_MAX_REPORT_LEN; i++)
 			pDevice->lastreport[i] = report[i];
-		pDevice->RegsSet = true;
+	}
+	else {
+		return;
 	}
 
 	uint8_t *report2 = pDevice->lastreport;
@@ -824,11 +826,11 @@ void TrackpadRawInput(PDEVICE_CONTEXT pDevice, struct csgesture_softc *sc, uint8
 
 			//map to cypress coordinates
 			//pos_y = 1500 - pos_y;
+			pos_y = pDevice->max_y - pos_y;
 			pos_x *= 2;
 			pos_x /= 7;
 			pos_y *= 2;
 			pos_y /= 7;
-			pos_y = 10000 - pos_y;
 
 
 			/*

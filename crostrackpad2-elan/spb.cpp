@@ -26,6 +26,123 @@ static ULONG ElanPrintDebugLevel = 100;
 static ULONG ElanPrintDebugCatagories = DBG_INIT || DBG_PNP || DBG_IOCTL;
 
 NTSTATUS
+SpbDoWriteDataSynchronously16(
+	IN SPB_CONTEXT *SpbContext,
+	IN UINT16 Address,
+	IN PVOID Data,
+	IN ULONG Length
+	)
+	/*++
+
+	Routine Description:
+
+	This helper routine abstracts creating and sending an I/O
+	request (I2C Write) to the Spb I/O target.
+
+	Arguments:
+
+	SpbContext - Pointer to the current device context
+	Address    - The I2C register address to write to
+	Data       - A buffer to receive the data at at the above address
+	Length     - The amount of data to be read from the above address
+
+	Return Value:
+
+	NTSTATUS Status indicating success or failure
+
+	--*/
+{
+	PUCHAR buffer;
+	ULONG length;
+	WDFMEMORY memory;
+	WDF_MEMORY_DESCRIPTOR memoryDescriptor;
+	NTSTATUS status;
+
+	//
+	// The address pointer and data buffer must be combined
+	// into one contiguous buffer representing the write transaction.
+	//
+	length = Length + 2;
+	memory = NULL;
+
+	if (length > DEFAULT_SPB_BUFFER_SIZE)
+	{
+		status = WdfMemoryCreate(
+			WDF_NO_OBJECT_ATTRIBUTES,
+			NonPagedPool,
+			CYAPA_POOL_TAG,
+			length,
+			&memory,
+			(PVOID *)&buffer);
+
+		if (!NT_SUCCESS(status))
+		{
+			ElanPrint(
+				DEBUG_LEVEL_ERROR,
+				DBG_IOCTL,
+				"Error allocating memory for Spb write - %!STATUS!",
+				status);
+			goto exit;
+		}
+
+		WDF_MEMORY_DESCRIPTOR_INIT_HANDLE(
+			&memoryDescriptor,
+			memory,
+			NULL);
+	}
+	else
+	{
+		buffer = (PUCHAR)WdfMemoryGetBuffer(SpbContext->WriteMemory, NULL);
+
+		WDF_MEMORY_DESCRIPTOR_INIT_BUFFER(
+			&memoryDescriptor,
+			(PVOID)buffer,
+			length);
+	}
+
+	UINT16 AddressBuffer[] = {
+		Address
+	};
+
+	//
+	// Transaction starts by specifying the address bytes
+	//
+	RtlCopyMemory(buffer, (UCHAR *)&AddressBuffer, sizeof(AddressBuffer));
+
+	//
+	// Address is followed by the data payload
+	//
+	RtlCopyMemory((buffer + sizeof(AddressBuffer)), Data, length - sizeof(AddressBuffer));
+
+	status = WdfIoTargetSendWriteSynchronously(
+		SpbContext->SpbIoTarget,
+		NULL,
+		&memoryDescriptor,
+		NULL,
+		NULL,
+		NULL);
+
+	if (!NT_SUCCESS(status))
+	{
+		ElanPrint(
+			DEBUG_LEVEL_ERROR,
+			DBG_IOCTL,
+			"Error writing to Spb - %!STATUS!",
+			status);
+		goto exit;
+	}
+
+exit:
+
+	if (NULL != memory)
+	{
+		WdfObjectDelete(memory);
+	}
+
+	return status;
+}
+
+NTSTATUS
 SpbDoWriteDataSynchronously(
 IN SPB_CONTEXT *SpbContext,
 IN UCHAR Address,
@@ -182,6 +299,49 @@ NTSTATUS Status indicating success or failure
 }
 
 NTSTATUS
+SpbWriteDataSynchronously16(
+	IN SPB_CONTEXT *SpbContext,
+	IN UINT16 Address,
+	IN PVOID Data,
+	IN ULONG Length
+	)
+	/*++
+
+	Routine Description:
+
+	This routine abstracts creating and sending an I/O
+	request (I2C Write) to the Spb I/O target and utilizes
+	a helper routine to do work inside of locked code.
+
+	Arguments:
+
+	SpbContext - Pointer to the current device context
+	Address    - The I2C register address to write to
+	Data       - A buffer to receive the data at at the above address
+	Length     - The amount of data to be read from the above address
+
+	Return Value:
+
+	NTSTATUS Status indicating success or failure
+
+	--*/
+{
+	NTSTATUS status;
+
+	WdfWaitLockAcquire(SpbContext->SpbLock, NULL);
+
+	status = SpbDoWriteDataSynchronously16(
+		SpbContext,
+		Address,
+		Data,
+		Length);
+
+	WdfWaitLockRelease(SpbContext->SpbLock);
+
+	return status;
+}
+
+NTSTATUS
 SpbReadDataSynchronously(
 _In_ SPB_CONTEXT *SpbContext,
 _In_ UCHAR Address,
@@ -224,6 +384,135 @@ NTSTATUS Status indicating success or failure
 	// Read transactions start by writing an address pointer
 	//
 	status = SpbDoWriteDataSynchronously(
+		SpbContext,
+		Address,
+		NULL,
+		0);
+
+	if (!NT_SUCCESS(status))
+	{
+		ElanPrint(
+			DEBUG_LEVEL_ERROR,
+			DBG_IOCTL,
+			"Error setting address pointer for Spb read - %!STATUS!",
+			status);
+		goto exit;
+	}
+
+	if (Length > DEFAULT_SPB_BUFFER_SIZE)
+	{
+		status = WdfMemoryCreate(
+			WDF_NO_OBJECT_ATTRIBUTES,
+			NonPagedPool,
+			CYAPA_POOL_TAG,
+			Length,
+			&memory,
+			(PVOID *)&buffer);
+
+		if (!NT_SUCCESS(status))
+		{
+			ElanPrint(
+				DEBUG_LEVEL_ERROR,
+				DBG_IOCTL,
+				"Error allocating memory for Spb read - %!STATUS!",
+				status);
+			goto exit;
+		}
+
+		WDF_MEMORY_DESCRIPTOR_INIT_HANDLE(
+			&memoryDescriptor,
+			memory,
+			NULL);
+	}
+	else
+	{
+		buffer = (PUCHAR)WdfMemoryGetBuffer(SpbContext->ReadMemory, NULL);
+
+		WDF_MEMORY_DESCRIPTOR_INIT_BUFFER(
+			&memoryDescriptor,
+			(PVOID)buffer,
+			Length);
+	}
+
+
+	status = WdfIoTargetSendReadSynchronously(
+		SpbContext->SpbIoTarget,
+		NULL,
+		&memoryDescriptor,
+		NULL,
+		NULL,
+		&bytesRead);
+
+	if (!NT_SUCCESS(status) ||
+		bytesRead != Length)
+	{
+		ElanPrint(
+			DEBUG_LEVEL_ERROR,
+			DBG_IOCTL,
+			"Error reading from Spb - %!STATUS!",
+			status);
+		goto exit;
+	}
+
+	//
+	// Copy back to the caller's buffer
+	//
+	RtlCopyMemory(Data, buffer, Length);
+
+exit:
+	if (NULL != memory)
+	{
+		WdfObjectDelete(memory);
+	}
+
+	WdfWaitLockRelease(SpbContext->SpbLock);
+
+	return status;
+}
+
+NTSTATUS
+SpbReadDataSynchronously16(
+	_In_ SPB_CONTEXT *SpbContext,
+	_In_ UINT16 Address,
+	_In_reads_bytes_(Length) PVOID Data,
+	_In_ ULONG Length
+	)
+	/*++
+
+	Routine Description:
+
+	This helper routine abstracts creating and sending an I/O
+	request (I2C Read) to the Spb I/O target.
+
+	Arguments:
+
+	SpbContext - Pointer to the current device context
+	Address    - The I2C register address to read from
+	Data       - A buffer to receive the data at at the above address
+	Length     - The amount of data to be read from the above address
+
+	Return Value:
+
+	NTSTATUS Status indicating success or failure
+
+	--*/
+{
+	PUCHAR buffer;
+	WDFMEMORY memory;
+	WDF_MEMORY_DESCRIPTOR memoryDescriptor;
+	NTSTATUS status;
+	ULONG_PTR bytesRead;
+
+	WdfWaitLockAcquire(SpbContext->SpbLock, NULL);
+
+	memory = NULL;
+	status = STATUS_INVALID_PARAMETER;
+	bytesRead = 0;
+
+	//
+	// Read transactions start by writing an address pointer
+	//
+	status = SpbDoWriteDataSynchronously16(
 		SpbContext,
 		Address,
 		NULL,

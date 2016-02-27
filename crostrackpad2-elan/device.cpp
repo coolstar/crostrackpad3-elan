@@ -178,9 +178,15 @@ bool IsElanLoaded(){
 	return deviceLoaded;
 }
 
+void elan_i2c_read_cmd(PDEVICE_CONTEXT pDevice, UINT16 reg, uint8_t *val) {
+	SpbReadDataSynchronously16(&pDevice->I2CContext, reg, val, ETP_I2C_INF_LENGTH);
+	DbgPrint("Elan Read Reg: 0x%x Val: 0x%x", reg, *val);
+}
+
 void elan_i2c_write_cmd(PDEVICE_CONTEXT pDevice, UINT16 reg, UINT16 cmd){
-	char buffer[] = { cmd };
-	SpbWriteDataSynchronously(&pDevice->I2CContext, reg, buffer, sizeof(buffer));
+	uint16_t buffer[] = { cmd };
+	DbgPrint("Elan Write Reg: 0x%x Val: 0x%x", reg, cmd);
+	SpbWriteDataSynchronously16(&pDevice->I2CContext, reg, (uint8_t *)buffer, sizeof(buffer));
 }
 
 NTSTATUS BOOTTRACKPAD(
@@ -195,15 +201,71 @@ NTSTATUS BOOTTRACKPAD(
 	FuncEntry(TRACE_FLAG_WDFLOADING);
 
 	elan_i2c_write_cmd(pDevice, ETP_I2C_STAND_CMD, ETP_I2C_RESET);
-
+	
 	uint8_t val[256];
 	SpbReadDataSynchronously(&pDevice->I2CContext, 0x00, &val, ETP_I2C_INF_LENGTH);
 
+	SpbReadDataSynchronously16(&pDevice->I2CContext, ETP_I2C_DESC_CMD, &val, ETP_I2C_DESC_LENGTH);
+
+	SpbReadDataSynchronously16(&pDevice->I2CContext, ETP_I2C_REPORT_DESC_CMD, &val, ETP_I2C_REPORT_DESC_LENGTH);
+
+	elan_i2c_write_cmd(pDevice, ETP_I2C_SET_CMD, ETP_ENABLE_ABS);
+
 	elan_i2c_write_cmd(pDevice, ETP_I2C_STAND_CMD, ETP_I2C_WAKE_UP);
 
-	FuncExit(TRACE_FLAG_WDFLOADING);
+	uint8_t val2[3];
+
+	elan_i2c_read_cmd(pDevice, ETP_I2C_UNIQUEID_CMD, val2);
+	uint8_t prodid = val2[0];
+
+	elan_i2c_read_cmd(pDevice, ETP_I2C_FW_VERSION_CMD, val2);
+	uint8_t version = val2[0];
+
+	elan_i2c_read_cmd(pDevice, ETP_I2C_FW_CHECKSUM_CMD, val2);
+	uint16_t csum = *((uint16_t *)val2);
+
+	elan_i2c_read_cmd(pDevice, ETP_I2C_SM_VERSION_CMD, val2);
+	uint8_t smvers = val2[0];
+
+	elan_i2c_read_cmd(pDevice, ETP_I2C_IAP_VERSION_CMD, val2);
+	uint8_t iapversion = val2[0];
+
+	elan_i2c_read_cmd(pDevice, ETP_I2C_PRESSURE_CMD, val2);
+
+	elan_i2c_read_cmd(pDevice, ETP_I2C_MAX_X_AXIS_CMD, val2);
+	uint16_t max_x = (*((uint16_t *)val2)) & 0x0fff;
+
+	elan_i2c_read_cmd(pDevice, ETP_I2C_MAX_Y_AXIS_CMD, val2);
+	uint16_t max_y = (*((uint16_t *)val2)) & 0x0fff;
+
+	elan_i2c_read_cmd(pDevice, ETP_I2C_XY_TRACENUM_CMD, val2);
+
+	uint8_t x_traces = val2[0];
+	uint8_t y_traces = val2[1];
+
+	pDevice->max_y = max_y;
+
+	csgesture_softc *sc = &pDevice->sc;
+	sc->resx = max_x;
+	sc->resy = max_y;
+	sc->phyx = max_x / x_traces;
+	sc->phyy = max_y / y_traces;
+
+	ElanPrint(DEBUG_LEVEL_INFO, DBG_PNP, "[etp] ProdID: %d Vers: %d Csum: %d SmVers: %d IAPVers: %d Max X: %d Max Y: %d\n", prodid, version, csum, smvers, iapversion, max_x, max_y);
+
+	elan_i2c_write_cmd(pDevice, ETP_I2C_SET_CMD, ETP_ENABLE_CALIBRATE | ETP_ENABLE_ABS);
+
+	elan_i2c_write_cmd(pDevice, ETP_I2C_STAND_CMD, ETP_I2C_WAKE_UP);
+
+	elan_i2c_write_cmd(pDevice, ETP_I2C_CALIBRATE_CMD, 1);
+
+	SpbReadDataSynchronously16(&pDevice->I2CContext, ETP_I2C_CALIBRATE_CMD, &val2, 1);
+
+	elan_i2c_write_cmd(pDevice, ETP_I2C_SET_CMD, ETP_ENABLE_ABS);
 
 	deviceLoaded = true;
+
+	FuncExit(TRACE_FLAG_WDFLOADING);
 	return status;
 }
 

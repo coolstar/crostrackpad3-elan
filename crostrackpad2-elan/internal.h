@@ -97,6 +97,8 @@ struct _DEVICE_CONTEXT
 
 	csgesture_softc sc;
 
+	uint16_t max_y;
+
 	uint8_t lastreport[ETP_MAX_REPORT_LEN];
 };
 
