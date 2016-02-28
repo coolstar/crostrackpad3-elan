@@ -369,9 +369,6 @@ IN WDFWORKITEM  WorkItem
 		for (int i = 0; i < ETP_MAX_REPORT_LEN; i++)
 			pDevice->lastreport[i] = report[i];
 	}
-	else {
-		return;
-	}
 
 	uint8_t *report2 = pDevice->lastreport;
 
@@ -411,6 +408,8 @@ static int distancesq(int delta_x, int delta_y){
 	return (delta_x * delta_x) + (delta_y*delta_y);
 }
 
+_CYAPA_RELATIVE_MOUSE_REPORT lastreport;
+
 static void update_relative_mouse(PDEVICE_CONTEXT pDevice, BYTE button,
 	BYTE x, BYTE y, BYTE wheelPosition, BYTE wheelHPosition){
 	_CYAPA_RELATIVE_MOUSE_REPORT report;
@@ -420,6 +419,13 @@ static void update_relative_mouse(PDEVICE_CONTEXT pDevice, BYTE button,
 	report.YValue = y;
 	report.WheelPosition = wheelPosition;
 	report.HWheelPosition = wheelHPosition;
+	if (report.Button == lastreport.Button &&
+		report.XValue == lastreport.XValue &&
+		report.YValue == lastreport.YValue &&
+		report.WheelPosition == lastreport.WheelPosition &&
+		report.HWheelPosition == lastreport.HWheelPosition)
+		return;
+	lastreport = report;
 
 	size_t bytesWritten;
 	ElanProcessVendorReport(pDevice, &report, sizeof(report), &bytesWritten);
