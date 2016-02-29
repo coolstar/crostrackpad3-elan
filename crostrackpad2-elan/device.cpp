@@ -180,12 +180,10 @@ bool IsElanLoaded(){
 
 void elan_i2c_read_cmd(PDEVICE_CONTEXT pDevice, UINT16 reg, uint8_t *val) {
 	SpbReadDataSynchronously16(&pDevice->I2CContext, reg, val, ETP_I2C_INF_LENGTH);
-	DbgPrint("Elan Read Reg: 0x%x Val: 0x%x", reg, *val);
 }
 
 void elan_i2c_write_cmd(PDEVICE_CONTEXT pDevice, UINT16 reg, UINT16 cmd){
 	uint16_t buffer[] = { cmd };
-	DbgPrint("Elan Write Reg: 0x%x Val: 0x%x", reg, cmd);
 	SpbWriteDataSynchronously16(&pDevice->I2CContext, reg, (uint8_t *)buffer, sizeof(buffer));
 }
 
