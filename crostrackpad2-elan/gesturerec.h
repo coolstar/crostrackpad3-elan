@@ -24,6 +24,15 @@ struct csgesture_softc {
 	int buttonmask;
 
 	//used internally in driver
+	int panningActive;
+	int idForPanning;
+
+	int scrollingActive;
+	int idsForScrolling[2];
+	int ticksSinceScrolling;
+
+	int blacklistedids[15];
+
 	bool mouseDownDueToTap;
 	int idForMouseDown;
 	bool mousedown;
