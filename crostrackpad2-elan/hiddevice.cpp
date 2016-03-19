@@ -192,9 +192,9 @@ IN WDFREQUEST Request
 	//
 
 	deviceAttributes->Size = sizeof(HID_DEVICE_ATTRIBUTES);
-	deviceAttributes->VendorID = CYAPA_VID;
-	deviceAttributes->ProductID = CYAPA_PID;
-	deviceAttributes->VersionNumber = CYAPA_VERSION;
+	deviceAttributes->VendorID = ELAN_VID;
+	deviceAttributes->ProductID = ELAN_PID;
+	deviceAttributes->VersionNumber = ELAN_VERSION;
 
 	//
 	// Report how many bytes were copied

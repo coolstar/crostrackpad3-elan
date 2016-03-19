@@ -6,9 +6,9 @@
 // to IOCTL_HID_GET_DEVICE_ATTRIBUTES.
 //
 
-#define CYAPA_PID              0x0004
-#define CYAPA_VID              0x04B4
-#define CYAPA_VERSION          0x0003
+#define ELAN_PID              0x0004
+#define ELAN_VID              0x04F3
+#define ELAN_VERSION          0x0003
 
 //
 // These are the report ids
