@@ -468,6 +468,10 @@ VOID
 		//
 		// Retrieves the device's HID descriptor.
 		//
+		status = BOOTTRACKPAD(pDevice);
+		if (!NT_SUCCESS(status)) {
+			ElanPrint(DBG_IOCTL, DEBUG_LEVEL_ERROR, "Error booting Elan device!\n");
+		}
 		status = ElanGetHidDescriptor(device, FxRequest);
 		fSync = TRUE;
 		break;
@@ -511,10 +515,7 @@ VOID
 		//
 		//Transmits a class driver-supplied report to the device.
 		//
-		status = BOOTTRACKPAD(pDevice);
-		if (!NT_SUCCESS(status)){
-			ElanPrint(DBG_IOCTL, DEBUG_LEVEL_ERROR, "Error booting Elan device!\n");
-		}
+		status = ElanWriteReport(pDevice, FxRequest);
 		fSync = TRUE;
 		break;
 

@@ -1,5 +1,5 @@
-#if !defined(_CYAPA_COMMON_H_)
-#define _CYAPA_COMMON_H_
+#if !defined(_ELAN_COMMON_H_)
+#define _ELAN_COMMON_H_
 
 //
 //These are the device attributes returned by vmulti in response
@@ -17,7 +17,9 @@
 #define REPORTID_FEATURE        0x02
 #define REPORTID_RELATIVE_MOUSE 0x04
 #define REPORTID_TOUCHPAD       0x05
+#define REPORTID_SCROLL			0x06
 #define REPORTID_KEYBOARD       0x07
+#define REPORTID_SCROLLCTRL		0x08
 
 //
 // Keyboard specific report infomation
@@ -29,7 +31,7 @@
 #define KBD_KEY_CODES        6
 
 #pragma pack(1)
-typedef struct _CYAPA_KEYBOARD_REPORT
+typedef struct _ELAN_KEYBOARD_REPORT
 {
 
 	BYTE      ReportID;
@@ -67,7 +69,7 @@ typedef struct _CYAPA_KEYBOARD_REPORT
 #define RELATIVE_MOUSE_MAX_COORDINATE   127
 
 #pragma pack(1)
-typedef struct _CYAPA_RELATIVE_MOUSE_REPORT
+typedef struct _ELAN_RELATIVE_MOUSE_REPORT
 {
 
 	BYTE        ReportID;
@@ -86,13 +88,46 @@ typedef struct _CYAPA_RELATIVE_MOUSE_REPORT
 #pragma pack()
 
 //
+// Scroll specific report information
+//
+#pragma pack(1)
+typedef struct _ELAN_SCROLL_REPORT
+{
+
+	BYTE        ReportID;
+
+	BYTE		Flag;
+
+	USHORT        Touch1XValue;
+
+	USHORT        Touch1YValue;
+
+	USHORT        Touch2XValue;
+
+	USHORT        Touch2YValue;
+
+} ElanScrollReport;
+#pragma pack()
+
+#pragma pack(1)
+typedef struct _ELAN_SCROLL_CONTROL_REPORT
+{
+
+	BYTE        ReportID;
+
+	BYTE		Flag;
+
+} ElanScrollControlReport;
+#pragma pack()
+
+//
 // Feature report infomation
 //
 
 #define DEVICE_MODE_MOUSE        0x00
 
 #pragma pack(1)
-typedef struct _CYAPA_FEATURE_REPORT
+typedef struct _ELAN_FEATURE_REPORT
 {
 
 	BYTE      ReportID;
