@@ -20,12 +20,15 @@
 #define REPORTID_SCROLL			0x06
 #define REPORTID_KEYBOARD       0x07
 #define REPORTID_SCROLLCTRL		0x08
+#define REPORTID_SETTINGS		0x09
 
 //
 // Keyboard specific report infomation
 //
 
 #define KBD_LCONTROL_BIT     1
+#define KBD_LSHIFT_BIT       2
+#define KBD_LALT_BIT         4
 #define KBD_LGUI_BIT         8
 
 #define KBD_KEY_CODES        6
@@ -118,6 +121,30 @@ typedef struct _ELAN_SCROLL_CONTROL_REPORT
 	BYTE		Flag;
 
 } ElanScrollControlReport;
+#pragma pack()
+
+#pragma pack(1)
+ typedef struct _ELAN_SETTINGS_REPORT
+ {
+
+	 BYTE        ReportID;
+	
+	 BYTE		SettingsRegister;
+	
+	 BYTE		SettingsValue;
+	
+} ElanSettingsReport;
+#pragma pack()
+
+#pragma pack(1)
+typedef struct _ELAN_INFO_REPORT
+{
+
+	BYTE        ReportID;
+
+	BYTE		Value[64];
+
+} ElanInfoReport;
 #pragma pack()
 
 //

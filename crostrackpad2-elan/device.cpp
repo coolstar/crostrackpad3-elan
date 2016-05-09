@@ -244,8 +244,18 @@ NTSTATUS BOOTTRACKPAD(
 	pDevice->max_y = max_y;
 
 	csgesture_softc *sc = &pDevice->sc;
+	sprintf(sc->product_id, "%d.0", prodid);
+	sprintf(sc->firmware_version, "%d.0", version);
+
 	sc->resx = max_x;
 	sc->resy = max_y;
+
+	sc->resx *= 2;
+	sc->resx /= 7;
+	
+	sc->resy *= 2;
+	sc->resy /= 7;
+
 	sc->phyx = max_x / x_traces;
 	sc->phyy = max_y / y_traces;
 
@@ -297,6 +307,8 @@ Status
 	NTSTATUS status = STATUS_SUCCESS;
 
 	WdfTimerStart(pDevice->Timer, WDF_REL_TIMEOUT_IN_MS(10));
+
+	BOOTTRACKPAD(pDevice);
 
 	pDevice->RegsSet = false;
 	pDevice->ConnectInterrupt = true;
@@ -468,10 +480,6 @@ VOID
 		//
 		// Retrieves the device's HID descriptor.
 		//
-		status = BOOTTRACKPAD(pDevice);
-		if (!NT_SUCCESS(status)) {
-			ElanPrint(DBG_IOCTL, DEBUG_LEVEL_ERROR, "Error booting Elan device!\n");
-		}
 		status = ElanGetHidDescriptor(device, FxRequest);
 		fSync = TRUE;
 		break;

@@ -9,6 +9,7 @@ static ULONG ElanPrintDebugLevel = 100;
 static ULONG ElanPrintDebugCatagories = DBG_INIT || DBG_PNP || DBG_IOCTL;
 
 void TrackpadRawInput(PDEVICE_CONTEXT pDevice, struct csgesture_softc *sc, uint8_t report[ETP_MAX_REPORT_LEN], int tickinc);
+void SetDefaultSettings(struct csgesture_softc *sc);
 void ElanTimerFunc(_In_ WDFTIMER hTimer);
 
 #define NT_DEVICE_NAME      L"\\Device\\ELANTP"
@@ -182,6 +183,8 @@ Status
 
 		pDevice = GetDeviceContext(fxDevice);
 		NT_ASSERT(pDevice != nullptr);
+
+		SetDefaultSettings(&pDevice->sc);
 
 		pDevice->FxDevice = fxDevice;
 	}
@@ -496,6 +499,12 @@ bool ProcessMove(PDEVICE_CONTEXT pDevice, csgesture_softc *sc, int abovethreshol
 		sc->dx = delta_x;
 		sc->dy = delta_y;
 
+		sc->dx *= sc->settings.pointerMultiplier;
+		sc->dx /= 10;
+
+		sc->dy *= sc->settings.pointerMultiplier;
+		sc->dy /= 10;
+
 		sc->panningActive = true;
 		sc->idForPanning = i;
 		return true;
@@ -504,12 +513,21 @@ bool ProcessMove(PDEVICE_CONTEXT pDevice, csgesture_softc *sc, int abovethreshol
 }
 
 bool ProcessScroll(PDEVICE_CONTEXT pDevice, csgesture_softc *sc, int abovethreshold, int iToUse[3]) {
+	if (!sc->settings.scrollEnabled)
+		return false;
+
 	sc->scrollx = 0;
 	sc->scrolly = 0;
 	if (abovethreshold == 2 || sc->scrollingActive) {
 		int i1 = iToUse[0];
 		int i2 = iToUse[1];
-		if (sc->scrollingActive) {
+
+		if (!sc->scrollingActive && !sc->scrollInertiaActive) {
+			if (sc->truetick[i1] < 4 && sc->truetick[i2] < 4)
+				return false; 
+		}
+
+		if (sc->scrollingActive){
 			if (i1 == -1) {
 				if (i2 != sc->idsForScrolling[0])
 					i1 = sc->idsForScrolling[0];
@@ -595,7 +613,7 @@ bool ProcessScroll(PDEVICE_CONTEXT pDevice, csgesture_softc *sc, int abovethresh
 			sc->ticksSinceScrolling++;
 		if (fngrcount == 2 || sc->ticksSinceScrolling <= 5) {
 			sc->scrollingActive = true;
-			if (abovethreshold == 2) {
+			if (abovethreshold == 2){
 				sc->idsForScrolling[0] = iToUse[0];
 				sc->idsForScrolling[1] = iToUse[1];
 			}
@@ -611,6 +629,11 @@ bool ProcessScroll(PDEVICE_CONTEXT pDevice, csgesture_softc *sc, int abovethresh
 }
 
 bool ProcessThreeFingerSwipe(PDEVICE_CONTEXT pDevice, csgesture_softc *sc, int abovethreshold, int iToUse[3]) {
+	if (sc->alttabswitchershowing) {
+		BYTE shiftKeys = KBD_LALT_BIT;
+		BYTE keyCodes[KBD_KEY_CODES] = { 0, 0, 0, 0, 0, 0 };
+		update_keyboard(pDevice, shiftKeys, keyCodes);
+	}
 	if (abovethreshold == 3 || abovethreshold == 4) {
 		stop_scroll(pDevice);
 
@@ -635,37 +658,175 @@ bool ProcessThreeFingerSwipe(PDEVICE_CONTEXT pDevice, csgesture_softc *sc, int a
 
 		if (sc->multitaskinggesturetick > 5 && !sc->multitaskingdone) {
 			if ((abs(delta_y1) + abs(delta_y2) + abs(delta_y3)) > (abs(delta_x1) + abs(delta_x2) + abs(delta_x3))) {
-				if (abs(sc->multitaskingy) > 50) {
-					BYTE shiftKeys = KBD_LGUI_BIT;
-					BYTE keyCodes[KBD_KEY_CODES] = { 0, 0, 0, 0, 0, 0 };
-					if (sc->multitaskingy < 0)
-						keyCodes[0] = 0x2B;
-					else
-						keyCodes[0] = 0x07;
-					update_keyboard(pDevice, shiftKeys, keyCodes);
-					shiftKeys = 0;
-					keyCodes[0] = 0x0;
-					update_keyboard(pDevice, shiftKeys, keyCodes);
-					sc->multitaskingx = 0;
-					sc->multitaskingy = 0;
-					sc->multitaskingdone = true;
+				if (abs(sc->multitaskingy) > 15) {
+					if (sc->multitaskingy < 0) {
+						if (sc->alttabswitchershowing) {
+							for (int i = 0; i < 3; i++) {
+								sc->idsforalttab[i] = iToUse[i];
+							}
+
+							BYTE shiftKeys = KBD_LALT_BIT;
+							BYTE keyCodes[KBD_KEY_CODES] = { 0, 0, 0, 0, 0, 0 };
+							keyCodes[0] = 0x52; //Alt + Up
+							update_keyboard(pDevice, shiftKeys, keyCodes);
+							keyCodes[0] = 0x0;
+							update_keyboard(pDevice, shiftKeys, keyCodes);
+							sc->multitaskingx = 0;
+							sc->multitaskingy = 0;
+							sc->multitaskingdone = true;
+						} 
+						else if (abovethreshold == 3 && sc->settings.threeFingerSwipeUpGesture == SwipeUpGestureTaskView ||
+							abovethreshold == 4 && sc->settings.fourFingerSwipeUpGesture == SwipeUpGestureTaskView) {
+							if (abs(sc->multitaskingy) > 50) {
+								BYTE shiftKeys = KBD_LGUI_BIT;
+								BYTE keyCodes[KBD_KEY_CODES] = { 0, 0, 0, 0, 0, 0 };
+								keyCodes[0] = 0x2B; //Windows Key + Tab
+								update_keyboard(pDevice, shiftKeys, keyCodes);
+								shiftKeys = 0;
+								keyCodes[0] = 0x0;
+								update_keyboard(pDevice, shiftKeys, keyCodes);
+								sc->multitaskingx = 0;
+								sc->multitaskingy = 0;
+								sc->multitaskingdone = true;
+							}
+						}
+					}
+					else {
+						if (sc->alttabswitchershowing) {
+							for (int i = 0; i < 3; i++) {
+								sc->idsforalttab[i] = iToUse[i];
+							}
+
+							BYTE shiftKeys = KBD_LALT_BIT;
+							BYTE keyCodes[KBD_KEY_CODES] = { 0, 0, 0, 0, 0, 0 };
+							keyCodes[0] = 0x51; //Alt + Down
+							update_keyboard(pDevice, shiftKeys, keyCodes);
+							keyCodes[0] = 0x0;
+							update_keyboard(pDevice, shiftKeys, keyCodes);
+							sc->multitaskingx = 0;
+							sc->multitaskingy = 0;
+							sc->multitaskingdone = true;
+						}
+						else if (abovethreshold == 3 && sc->settings.threeFingerSwipeDownGesture == SwipeDownGestureShowDesktop ||
+							abovethreshold == 4 && sc->settings.fourFingerSwipeDownGesture == SwipeDownGestureShowDesktop) {
+							if (abs(sc->multitaskingy) > 50) {
+								BYTE shiftKeys = KBD_LGUI_BIT;
+								BYTE keyCodes[KBD_KEY_CODES] = { 0, 0, 0, 0, 0, 0 };
+								keyCodes[0] = 0x07;  //Windows Key + D
+								update_keyboard(pDevice, shiftKeys, keyCodes);
+								shiftKeys = 0;
+								keyCodes[0] = 0x0;
+								update_keyboard(pDevice, shiftKeys, keyCodes);
+								sc->multitaskingx = 0;
+								sc->multitaskingy = 0;
+								sc->multitaskingdone = true;
+							}
+						}
+					}
 				}
 			}
 			else {
-				if (abs(sc->multitaskingx) > 50) {
-					BYTE shiftKeys = KBD_LGUI_BIT | KBD_LCONTROL_BIT;
-					BYTE keyCodes[KBD_KEY_CODES] = { 0, 0, 0, 0, 0, 0 };
-					if (sc->multitaskingx > 0)
-						keyCodes[0] = 0x50;
-					else
-						keyCodes[0] = 0x4F;
-					update_keyboard(pDevice, shiftKeys, keyCodes);
-					shiftKeys = 0;
-					keyCodes[0] = 0x0;
-					update_keyboard(pDevice, shiftKeys, keyCodes);
-					sc->multitaskingx = 0;
-					sc->multitaskingy = 0;
-					sc->multitaskingdone = true;
+				if (abs(sc->multitaskingx) > 15) {
+					if (sc->multitaskingx > 0) {
+						if ((abovethreshold == 3 && sc->settings.threeFingerSwipeLeftRightGesture == SwipeGestureSwitchWorkspace ||
+							abovethreshold == 4 && sc->settings.fourFingerSwipeLeftRightGesture == SwipeGestureSwitchWorkspace) &&
+							!sc->alttabswitchershowing) {
+							if (abs(sc->multitaskingx) > 50) {
+								BYTE shiftKeys = KBD_LGUI_BIT | KBD_LCONTROL_BIT;
+								BYTE keyCodes[KBD_KEY_CODES] = { 0, 0, 0, 0, 0, 0 };
+								keyCodes[0] = 0x50; //Ctrl + Windows Key + Left
+								update_keyboard(pDevice, shiftKeys, keyCodes);
+								shiftKeys = 0;
+								keyCodes[0] = 0x0;
+								update_keyboard(pDevice, shiftKeys, keyCodes);
+								sc->multitaskingx = 0;
+								sc->multitaskingy = 0;
+								sc->multitaskingdone = true;
+							}
+						}
+						else if (abovethreshold == 3 && sc->settings.threeFingerSwipeLeftRightGesture == SwipeGestureAltTabSwitcher ||
+							abovethreshold == 4 && sc->settings.fourFingerSwipeLeftRightGesture == SwipeGestureAltTabSwitcher ||
+							sc->alttabswitchershowing) {
+							for (int i = 0; i < 3; i++) {
+								sc->idsforalttab[i] = iToUse[i];
+							}
+
+							if (!sc->alttabswitchershowing) {
+								BYTE shiftKeys = KBD_LALT_BIT;
+								BYTE keyCodes[KBD_KEY_CODES] = { 0, 0, 0, 0, 0, 0 };
+								keyCodes[0] = 0x2B; //Alt + Tab
+								update_keyboard(pDevice, shiftKeys, keyCodes);
+								shiftKeys = KBD_LALT_BIT;
+								keyCodes[0] = 0x0;
+								update_keyboard(pDevice, shiftKeys, keyCodes);
+								sc->multitaskingx = 0;
+								sc->multitaskingy = 0;
+								sc->multitaskingdone = true;
+								sc->alttabswitchershowing = true;
+							}
+							else {
+								BYTE shiftKeys = KBD_LALT_BIT;
+								BYTE keyCodes[KBD_KEY_CODES] = { 0, 0, 0, 0, 0, 0 };
+								keyCodes[0] = 0x4F; //Alt + Right
+								update_keyboard(pDevice, shiftKeys, keyCodes);
+								keyCodes[0] = 0x0;
+								update_keyboard(pDevice, shiftKeys, keyCodes);
+								sc->multitaskingx = 0;
+								sc->multitaskingy = 0;
+								sc->multitaskingdone = true;
+							}
+						}
+					}
+					else {
+						if ((abovethreshold == 3 && sc->settings.threeFingerSwipeLeftRightGesture == SwipeGestureSwitchWorkspace ||
+							abovethreshold == 4 && sc->settings.fourFingerSwipeLeftRightGesture == SwipeGestureSwitchWorkspace) &&
+							!sc->alttabswitchershowing) {
+							if (abs(sc->multitaskingx) > 50) {
+								BYTE shiftKeys = KBD_LGUI_BIT | KBD_LCONTROL_BIT;
+								BYTE keyCodes[KBD_KEY_CODES] = { 0, 0, 0, 0, 0, 0 };
+								keyCodes[0] = 0x4F; //Ctrl + Windows Key + Right
+								update_keyboard(pDevice, shiftKeys, keyCodes);
+								shiftKeys = 0;
+								keyCodes[0] = 0x0;
+								update_keyboard(pDevice, shiftKeys, keyCodes);
+								sc->multitaskingx = 0;
+								sc->multitaskingy = 0;
+								sc->multitaskingdone = true;
+							}
+						}
+						else if (abovethreshold == 3 && sc->settings.threeFingerSwipeLeftRightGesture == SwipeGestureAltTabSwitcher ||
+							abovethreshold == 4 && sc->settings.fourFingerSwipeLeftRightGesture == SwipeGestureAltTabSwitcher ||
+							sc->alttabswitchershowing) {
+							for (int i = 0; i < 3; i++) {
+								sc->idsforalttab[i] = iToUse[i];
+							}
+
+							if (!sc->alttabswitchershowing) {
+								BYTE shiftKeys = KBD_LALT_BIT | KBD_LSHIFT_BIT;
+								BYTE keyCodes[KBD_KEY_CODES] = { 0, 0, 0, 0, 0, 0 };
+								keyCodes[0] = 0x2B; //Alt + Shift + Tab
+								update_keyboard(pDevice, shiftKeys, keyCodes);
+								shiftKeys = KBD_LALT_BIT;
+								keyCodes[0] = 0x0;
+								update_keyboard(pDevice, shiftKeys, keyCodes);
+								sc->multitaskingx = 0;
+								sc->multitaskingy = 0;
+								sc->multitaskingdone = true;
+								sc->alttabswitchershowing = true;
+							}
+							else {
+								BYTE shiftKeys = KBD_LALT_BIT;
+								BYTE keyCodes[KBD_KEY_CODES] = { 0, 0, 0, 0, 0, 0 };
+								keyCodes[0] = 0x50; //Alt + Left
+								update_keyboard(pDevice, shiftKeys, keyCodes);
+								keyCodes[0] = 0x0;
+								update_keyboard(pDevice, shiftKeys, keyCodes);
+								sc->multitaskingx = 0;
+								sc->multitaskingy = 0;
+								sc->multitaskingdone = true;
+							}
+						}
+					}
 				}
 			}
 		}
@@ -678,6 +839,31 @@ bool ProcessThreeFingerSwipe(PDEVICE_CONTEXT pDevice, csgesture_softc *sc, int a
 		return true;
 	}
 	else {
+		if (sc->alttabswitchershowing) {
+			bool foundTouch = false;
+			for (int i = 0; i < MAX_FINGERS; i++) {
+				if (foundTouch)
+					break;
+				if (sc->x[i] == -1)
+					continue;
+				for (int j = 0; j < 3; j++) {
+					if (i = sc->idsforalttab[j]) {
+						foundTouch = true;
+						break;
+					}
+				}
+			}
+			if (!foundTouch) {
+				BYTE shiftKeys = 0;
+				BYTE keyCodes[KBD_KEY_CODES] = { 0, 0, 0, 0, 0, 0 };
+				keyCodes[0] = 0x0;
+				update_keyboard(pDevice, shiftKeys, keyCodes);
+				sc->alttabswitchershowing = false;
+				for (int i = 0; i < 3; i++) {
+					sc->idsforalttab[i] = -1;
+				}
+			}
+		}
 		sc->multitaskingx = 0;
 		sc->multitaskingy = 0;
 		sc->multitaskinggesturetick = 0;
@@ -687,6 +873,8 @@ bool ProcessThreeFingerSwipe(PDEVICE_CONTEXT pDevice, csgesture_softc *sc, int a
 }
 
 void TapToClickOrDrag(PDEVICE_CONTEXT pDevice, csgesture_softc *sc, int button) {
+	if (!sc->settings.tapToClickEnabled)
+		return;
 	if (sc->scrollInertiaActive)
 		return;
 
@@ -716,13 +904,48 @@ void TapToClickOrDrag(PDEVICE_CONTEXT pDevice, csgesture_softc *sc, int button) 
 
 	switch (button) {
 	case 1:
-		buttonmask = MOUSE_BUTTON_1;
+		if (!sc->settings.swapLeftRightFingers)
+			buttonmask = MOUSE_BUTTON_1;
+		else
+			buttonmask = MOUSE_BUTTON_2;
 		break;
 	case 2:
-		buttonmask = MOUSE_BUTTON_2;
+		if (sc->settings.multiFingerTap) {
+			if (!sc->settings.swapLeftRightFingers)
+				buttonmask = MOUSE_BUTTON_2;
+			else
+				buttonmask = MOUSE_BUTTON_1;
+		}
 		break;
 	case 3:
-		buttonmask = MOUSE_BUTTON_3;
+		if (sc->settings.multiFingerTap) {
+			if (sc->settings.threeFingerTapAction == ThreeFingerTapActionWheelClick)
+				buttonmask = MOUSE_BUTTON_3;
+			else if (sc->settings.threeFingerTapAction == ThreeFingerTapActionCortana) {
+				buttonmask = 0;
+
+				BYTE shiftKeys = KBD_LGUI_BIT;
+				BYTE keyCodes[KBD_KEY_CODES] = { 0, 0, 0, 0, 0, 0 };
+				keyCodes[0] = 0x06; //Windows Key + C for Cortana
+				update_keyboard(pDevice, shiftKeys, keyCodes);
+				shiftKeys = 0;
+				keyCodes[0] = 0x0;
+				update_keyboard(pDevice, shiftKeys, keyCodes);
+			}
+		}
+		break;
+	case 4:
+		if (sc->settings.fourFingerTapEnabled) {
+			buttonmask = 0;
+
+			BYTE shiftKeys = KBD_LGUI_BIT;
+			BYTE keyCodes[KBD_KEY_CODES] = { 0, 0, 0, 0, 0, 0 };
+			keyCodes[0] = 0x04; //Windows Key + A for Action Center
+			update_keyboard(pDevice, shiftKeys, keyCodes);
+			shiftKeys = 0;
+			keyCodes[0] = 0x0;
+			update_keyboard(pDevice, shiftKeys, keyCodes);
+		}
 		break;
 	}
 	if (buttonmask != 0 && sc->tickssinceclick > 10 && sc->ticksincelastrelease == 0) {
@@ -761,6 +984,7 @@ void ProcessGesture(PDEVICE_CONTEXT pDevice, csgesture_softc *sc) {
 
 	int abovethreshold = 0;
 	int recentlyadded = 0;
+	int lastrecentlyadded = -1;
 	int iToUse[3] = { -1,-1,-1 };
 	int a = 0;
 
@@ -771,8 +995,10 @@ void ProcessGesture(PDEVICE_CONTEXT pDevice, csgesture_softc *sc) {
 	}
 
 	for (int i = 0;i < MAX_FINGERS;i++) {
-		if (sc->truetick[i] < 30 && sc->truetick[i] != 0)
+		if (sc->truetick[i] < 30 && sc->truetick[i] != 0) {
 			recentlyadded++;
+			lastrecentlyadded = i;
+		}
 		if (sc->tick[i] == 0)
 			continue;
 		if (sc->blacklistedids[i] == 1)
@@ -799,6 +1025,14 @@ void ProcessGesture(PDEVICE_CONTEXT pDevice, csgesture_softc *sc) {
 	int buttonmask = 0;
 
 	sc->mousebutton = recentlyadded;
+
+	if (sc->settings.rightClickBottomRight) {
+		if (sc->mousebutton == 1 && lastrecentlyadded != -1) {
+			if (sc->x[lastrecentlyadded] > sc->resx / 2 && sc->y[lastrecentlyadded] > (sc->resy - 60))
+				sc->mousebutton = 2;
+		}
+	}
+
 	if (sc->mousebutton == 0)
 		sc->mousebutton = abovethreshold;
 
@@ -807,7 +1041,7 @@ void ProcessGesture(PDEVICE_CONTEXT pDevice, csgesture_softc *sc) {
 			sc->mousebutton = 1;
 		else
 			sc->mousebutton = nfingers;
-		if (sc->mousebutton == 0)
+		if (sc->mousebutton == 0 && sc->settings.clickWithNoFingers)
 			sc->mousebutton = 1;
 	}
 	if (sc->mousebutton > 3)
@@ -820,13 +1054,23 @@ void ProcessGesture(PDEVICE_CONTEXT pDevice, csgesture_softc *sc) {
 
 			switch (sc->mousebutton) {
 			case 1:
-				buttonmask = MOUSE_BUTTON_1;
+				if (!sc->settings.swapLeftRightFingers)
+					buttonmask = MOUSE_BUTTON_1;
+				else
+					buttonmask = MOUSE_BUTTON_2;
 				break;
 			case 2:
-				buttonmask = MOUSE_BUTTON_2;
+				if (sc->settings.multiFingerClick) {
+					if (!sc->settings.swapLeftRightFingers)
+						buttonmask = MOUSE_BUTTON_2;
+					else
+						buttonmask = MOUSE_BUTTON_1;
+				}
 				break;
 			case 3:
-				buttonmask = MOUSE_BUTTON_3;
+				if (sc->settings.multiFingerClick) {
+					buttonmask = MOUSE_BUTTON_3;
+				}
 				break;
 			}
 			sc->buttonmask = buttonmask;
@@ -845,7 +1089,8 @@ void ProcessGesture(PDEVICE_CONTEXT pDevice, csgesture_softc *sc) {
 		if (sc->x[i] != -1) {
 			if (sc->lastx[i] == -1) {
 				if (sc->ticksincelastrelease < 10 && sc->mouseDownDueToTap && sc->idForMouseDown == -1) {
-					sc->idForMouseDown = i; //Associate Tap Drag
+					if (sc->settings.tapDragEnabled)
+						sc->idForMouseDown = i; //Associate Tap Drag
 				}
 			}
 			sc->truetick[i]++;
@@ -927,8 +1172,8 @@ void ProcessGesture(PDEVICE_CONTEXT pDevice, csgesture_softc *sc) {
 	update_relative_mouse(pDevice, sc->buttonmask, sc->dx, sc->dy, sc->scrolly, sc->scrollx);
 }
 
-void TrackpadRawInput(PDEVICE_CONTEXT pDevice, struct csgesture_softc *sc, uint8_t report[ETP_MAX_REPORT_LEN], int tickinc){
-	if (report[0] == 0xff){
+void TrackpadRawInput(PDEVICE_CONTEXT pDevice, struct csgesture_softc *sc, uint8_t report[ETP_MAX_REPORT_LEN], int tickinc) {
+	if (report[0] == 0xff) {
 		return;
 	}
 
@@ -994,12 +1239,124 @@ void TrackpadRawInput(PDEVICE_CONTEXT pDevice, struct csgesture_softc *sc, uint8
 		else {
 		}
 
-		if (contact_valid){
+		if (contact_valid) {
 			finger_data += ETP_FINGER_DATA_LEN;
 			nfingers++;
 		}
-		}
+	}
 	sc->buttondown = (tp_info & 0x01);
 
 	ProcessGesture(pDevice, sc);
+}
+
+void SetDefaultSettings(struct csgesture_softc *sc) {
+	sc->settings.pointerMultiplier = 10; //done
+
+	//click settings
+	sc->settings.swapLeftRightFingers = false;
+	sc->settings.clickWithNoFingers = true;
+	sc->settings.multiFingerClick = true;
+	sc->settings.rightClickBottomRight = false;
+
+	//tap settings
+	sc->settings.tapToClickEnabled = true;
+	sc->settings.multiFingerTap = true;
+	sc->settings.tapDragEnabled = true;
+
+	sc->settings.threeFingerTapAction = ThreeFingerTapActionCortana;
+
+	sc->settings.fourFingerTapEnabled = true;
+
+	//scroll settings
+	sc->settings.scrollEnabled = true;
+
+	//three finger gestures
+	sc->settings.threeFingerSwipeUpGesture = SwipeUpGestureTaskView;
+	sc->settings.threeFingerSwipeDownGesture = SwipeDownGestureShowDesktop;
+	sc->settings.threeFingerSwipeLeftRightGesture = SwipeGestureAltTabSwitcher;
+
+	//four finger gestures
+	sc->settings.fourFingerSwipeUpGesture = SwipeUpGestureTaskView;
+	sc->settings.fourFingerSwipeDownGesture = SwipeDownGestureShowDesktop;
+	sc->settings.fourFingerSwipeLeftRightGesture = SwipeGestureSwitchWorkspace;
+}
+
+void ProcessInfo(PDEVICE_CONTEXT pDevice, struct csgesture_softc *sc, int infoValue) {
+	_ELAN_INFO_REPORT report;
+	report.ReportID = REPORTID_SETTINGS;
+	for (int i = 0; i < 60; i++)
+		report.Value[i] = 0x00;
+	switch (infoValue) {
+	case 0: //driver version
+		strcpy((char *)report.Value, "3.0-elan beta 11.9 (5/8/2016)");
+		break;
+	case 1: //product name
+		strcpy((char *)report.Value, sc->product_id);
+		break;
+	case 2: //firmware version
+		strcpy((char *)report.Value, sc->firmware_version);
+		break;
+	}
+
+	size_t bytesWritten;
+	ElanProcessVendorReport(pDevice, &report, sizeof(report), &bytesWritten);
+}
+
+void ProcessSetting(PDEVICE_CONTEXT pDevice, struct csgesture_softc *sc, int settingRegister, int settingValue) {
+	switch (settingRegister) {
+	case 0:
+		sc->settings.pointerMultiplier = settingValue;
+		break;
+	case 1:
+		sc->settings.swapLeftRightFingers = settingValue;
+		break;
+	case 2:
+		sc->settings.clickWithNoFingers = settingValue;
+		break;
+	case 3:
+		sc->settings.multiFingerClick = settingValue;
+		break;
+	case 4:
+		sc->settings.rightClickBottomRight = settingValue;
+		break;
+	case 5:
+		sc->settings.tapToClickEnabled = settingValue;
+		break;
+	case 6:
+		sc->settings.multiFingerTap = settingValue;
+		break;
+	case 7:
+		sc->settings.tapDragEnabled = settingValue;
+		break;
+	case 8:
+		sc->settings.threeFingerTapAction = (ThreeFingerTapAction)settingValue;
+		break;
+	case 9:
+		sc->settings.fourFingerTapEnabled = settingValue;
+		break;
+	case 10:
+		sc->settings.scrollEnabled = settingValue;
+		break;
+	case 11:
+		sc->settings.threeFingerSwipeUpGesture = (SwipeUpGesture)settingValue;
+		break;
+	case 12:
+		sc->settings.threeFingerSwipeDownGesture = (SwipeDownGesture)settingValue;
+		break;
+	case 13:
+		sc->settings.threeFingerSwipeLeftRightGesture = (SwipeGesture)settingValue;
+		break;
+	case 14:
+		sc->settings.fourFingerSwipeUpGesture = (SwipeUpGesture)settingValue;
+		break;
+	case 15:
+		sc->settings.fourFingerSwipeDownGesture = (SwipeDownGesture)settingValue;
+		break;
+	case 16:
+		sc->settings.fourFingerSwipeLeftRightGesture = (SwipeGesture)settingValue;
+		break;
+	case 255: //255 is for driver info
+		ProcessInfo(pDevice, sc, settingValue);
+		break;
+	}
 }

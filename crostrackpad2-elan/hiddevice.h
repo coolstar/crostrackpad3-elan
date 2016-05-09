@@ -74,7 +74,7 @@ HID_REPORT_DESCRIPTOR DefaultReportDescriptor[] = {
 	0x75, 0x08,                         //     Report Size (8)
 	0x95, 0x01,                         //     Report Count (1)
 	0x81, 0x06,                         //     Input (Data, Variable, Relative)
-	// ------------------------------  Horizontal wheel
+										// ------------------------------  Horizontal wheel
 	0x05, 0x0c,                         //     USAGE_PAGE (Consumer Devices)
 	0x0a, 0x38, 0x02,                   //     USAGE (AC Pan)
 	0x15, 0x81,                         //     LOGICAL_MINIMUM (-127)
@@ -88,7 +88,7 @@ HID_REPORT_DESCRIPTOR DefaultReportDescriptor[] = {
 	0x06, 0x00, 0xff,                    // USAGE_PAGE (Vendor Defined Page 1)
 	0x09, 0x01,                          // USAGE (Vendor Usage 1)
 	0xa1, 0x01,                          // COLLECTION (Application)
-	0x85, REPORTID_SCROLL,              //   REPORT_ID (1)
+	0x85, REPORTID_SCROLL,              //   REPORT_ID (Scroll)
 	0x15, 0x00,                          //   LOGICAL_MINIMUM (0)
 	0x26, 0xff, 0x00,                    //   LOGICAL_MAXIMUM (256)
 	0x75, 0x08,                          //   REPORT_SIZE  (8)   - bits
@@ -106,7 +106,7 @@ HID_REPORT_DESCRIPTOR DefaultReportDescriptor[] = {
 	0x06, 0x00, 0xff,                    // USAGE_PAGE (Vendor Defined Page 1)
 	0x09, 0x02,                          // USAGE (Vendor Usage 2)
 	0xa1, 0x01,                          // COLLECTION (Application)
-	0x85, REPORTID_SCROLLCTRL,              //   REPORT_ID (1)
+	0x85, REPORTID_SCROLLCTRL,              //   REPORT_ID (Scroll Controls)
 	0x15, 0x00,                          //   LOGICAL_MINIMUM (0)
 	0x26, 0xff, 0x00,                    //   LOGICAL_MAXIMUM (256)
 	0x75, 0x08,                          //   REPORT_SIZE  (8)   - bits
@@ -115,9 +115,26 @@ HID_REPORT_DESCRIPTOR DefaultReportDescriptor[] = {
 	0x91, 0x02,                          //   OUTPUT (Data,Var,Abs)
 	0xc0,                                // END_COLLECTION
 
-	//
-	// Keyboard report starts here
-	//    
+	0x06, 0x00, 0xff,                    // USAGE_PAGE (Vendor Defined Page 1)
+	0x09, 0x03,                          // USAGE (Vendor Usage 3)
+	0xa1, 0x01,                          // COLLECTION (Application)
+	0x85, REPORTID_SETTINGS,              //   REPORT_ID (Settings)
+	0x15, 0x00,                          //   LOGICAL_MINIMUM (0)
+	0x26, 0xff, 0x00,                    //   LOGICAL_MAXIMUM (256)
+	0x75, 0x08,                          //   REPORT_SIZE  (8)   - bits
+	0x95, 0x01,                          //   REPORT_COUNT (1)  - Bytes
+	0x09, 0x02,                          //   USAGE (Vendor Usage 1)
+	0x91, 0x02,                          //   OUTPUT (Data,Var,Abs)
+	0x09, 0x03,                          //   USAGE (Vendor Usage 2)
+	0x91, 0x02,                          //   OUTPUT (Data,Var,Abs)
+	0x95, 0x40,                          //   REPORT_COUNT (64)  - Bytes
+	0x09, 0x02,                          //   USAGE (Vendor Usage 1)
+	0x81, 0x02,                          //   INPUT (Data,Var,Abs)
+	0xc0,                                // END_COLLECTION
+
+										 //
+										 // Keyboard report starts here
+										 //    
 	0x05, 0x01,                         // USAGE_PAGE (Generic Desktop)
 	0x09, 0x06,                         // USAGE (Keyboard)
 	0xa1, 0x01,                         // COLLECTION (Application)

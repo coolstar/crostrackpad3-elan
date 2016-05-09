@@ -232,7 +232,7 @@ IN WDFREQUEST Request
 		break;
 
 	case HID_STRING_ID_IPRODUCT:
-		pwstrID = L"Cypress v3 Trackpad\0";
+		pwstrID = L"Elan I2C Trackpad\0";
 		break;
 
 	case HID_STRING_ID_ISERIALNUMBER:
@@ -409,7 +409,8 @@ ElanWriteReport(
 	NTSTATUS status = STATUS_SUCCESS;
 	WDF_REQUEST_PARAMETERS params;
 	PHID_XFER_PACKET transferPacket = NULL;
-	ElanScrollControlReport* pReport = NULL;
+	ElanScrollControlReport *pScrollCtrlReport = NULL;
+	ElanSettingsReport *pSettingsReport = NULL;
 	size_t bytesWritten = 0;
 
 	ElanPrint(DEBUG_LEVEL_VERBOSE, DBG_IOCTL,
@@ -447,9 +448,9 @@ ElanWriteReport(
 			{
 			case REPORTID_SCROLLCTRL:
 
-				pReport = (ElanScrollControlReport *)transferPacket->reportBuffer;
+				pScrollCtrlReport = (ElanScrollControlReport *)transferPacket->reportBuffer;
 
-				if (pReport->Flag == 1) {
+				if (pScrollCtrlReport->Flag == 1) {
 					DevContext->sc.scrollInertiaActive = 1;
 				}
 				else {
@@ -458,6 +459,10 @@ ElanWriteReport(
 
 				break;
 
+			case REPORTID_SETTINGS:
+				pSettingsReport = (ElanSettingsReport *)transferPacket->reportBuffer;
+				ProcessSetting(DevContext, &DevContext->sc, pSettingsReport->SettingsRegister, pSettingsReport->SettingsValue);
+				break;
 			default:
 
 				ElanPrint(DEBUG_LEVEL_ERROR, DBG_IOCTL,
