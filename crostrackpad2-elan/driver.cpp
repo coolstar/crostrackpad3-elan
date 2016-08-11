@@ -348,37 +348,18 @@ BOOLEAN OnInterruptIsr(
 	PDEVICE_CONTEXT pDevice = GetDeviceContext(Device);
 
 	if (!pDevice->ConnectInterrupt){
-		return true;
+		return false;
 	}
-
-	//IRQ's don't work with the elan trackpad so we are resorting to polling instead.
-	return true;
-}
-
-VOID
-ElanReadWriteWorkItem(
-IN WDFWORKITEM  WorkItem
-)
-{
-	WDFDEVICE Device = (WDFDEVICE)WdfWorkItemGetParentObject(WorkItem);
-	PDEVICE_CONTEXT pDevice = GetDeviceContext(Device);
-	if (!pDevice->ConnectInterrupt)
-		return;
 
 	uint8_t report[ETP_MAX_REPORT_LEN];
 	SpbReadDataSynchronously(&pDevice->I2CContext, 0, &report, sizeof(report));
 
-	if (report[0] != 0xff){
+	if (report[0] != 0xff) {
 		for (int i = 0; i < ETP_MAX_REPORT_LEN; i++)
 			pDevice->lastreport[i] = report[i];
 	}
 
-	uint8_t *report2 = pDevice->lastreport;
-
-	csgesture_softc sc = pDevice->sc;
-	TrackpadRawInput(pDevice, &sc, report2, 1);
-	pDevice->sc = sc;
-	WdfObjectDelete(WorkItem);
+	return true;
 }
 
 void ElanTimerFunc(_In_ WDFTIMER hTimer){
@@ -388,21 +369,13 @@ void ElanTimerFunc(_In_ WDFTIMER hTimer){
 	if (!pDevice->ConnectInterrupt)
 		return;
 
-	PDEVICE_CONTEXT context;
-	WDF_OBJECT_ATTRIBUTES attributes;
-	WDF_WORKITEM_CONFIG workitemConfig;
-	WDFWORKITEM hWorkItem;
+	uint8_t *report = pDevice->lastreport;
 
-	WDF_OBJECT_ATTRIBUTES_INIT(&attributes);
-	WDF_OBJECT_ATTRIBUTES_SET_CONTEXT_TYPE(&attributes, DEVICE_CONTEXT);
-	attributes.ParentObject = Device;
-	WDF_WORKITEM_CONFIG_INIT(&workitemConfig, ElanReadWriteWorkItem);
-
-	WdfWorkItemCreate(&workitemConfig,
-		&attributes,
-		&hWorkItem);
-
-	WdfWorkItemEnqueue(hWorkItem);
+	if (report[0] != 0xff) {
+		csgesture_softc sc = pDevice->sc;
+		TrackpadRawInput(pDevice, &sc, report, 1);
+		pDevice->sc = sc;
+	}
 
 	return;
 }
@@ -1288,7 +1261,7 @@ void ProcessInfo(PDEVICE_CONTEXT pDevice, struct csgesture_softc *sc, int infoVa
 		report.Value[i] = 0x00;
 	switch (infoValue) {
 	case 0: //driver version
-		strcpy((char *)report.Value, "3.0-elan beta 11.9 (5/8/2016)");
+		strcpy((char *)report.Value, "3.0-elan beta 11.10 (8/10/2016)");
 		break;
 	case 1: //product name
 		strcpy((char *)report.Value, sc->product_id);
