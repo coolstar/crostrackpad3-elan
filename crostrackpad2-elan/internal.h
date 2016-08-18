@@ -99,6 +99,8 @@ struct _DEVICE_CONTEXT
 
 	uint16_t max_y;
 
+	uint8_t hw_res_x, hw_res_y;
+
 	uint8_t lastreport[ETP_MAX_REPORT_LEN];
 };
 

@@ -1185,10 +1185,15 @@ void TrackpadRawInput(PDEVICE_CONTEXT pDevice, struct csgesture_softc *sc, uint8
 			//map to cypress coordinates
 			//pos_y = 1500 - pos_y;
 			pos_y = pDevice->max_y - pos_y;
-			pos_x *= 2;
+			/*pos_x *= 2;
 			pos_x /= 7;
 			pos_y *= 2;
-			pos_y /= 7;
+			pos_y /= 7;*/
+			pos_x *= 10;
+			pos_x /= pDevice->hw_res_x;
+
+			pos_y *= 10;
+			pos_y /= pDevice->hw_res_y;
 
 
 			/*
@@ -1261,7 +1266,7 @@ void ProcessInfo(PDEVICE_CONTEXT pDevice, struct csgesture_softc *sc, int infoVa
 		report.Value[i] = 0x00;
 	switch (infoValue) {
 	case 0: //driver version
-		strcpy((char *)report.Value, "3.0-elan beta 11.10 (8/10/2016)");
+		strcpy((char *)report.Value, "3.0-elan (8/18/2016)");
 		break;
 	case 1: //product name
 		strcpy((char *)report.Value, sc->product_id);

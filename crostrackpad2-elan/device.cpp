@@ -241,25 +241,39 @@ NTSTATUS BOOTTRACKPAD(
 	uint8_t x_traces = val2[0];
 	uint8_t y_traces = val2[1];
 
+	elan_i2c_read_cmd(pDevice, ETP_I2C_RESOLUTION_CMD, val2);
+
+	uint8_t hw_res_x = val2[0];
+	uint8_t hw_res_y = val2[1];
+
+	hw_res_x = (hw_res_x * 10 + 790) * 10 / 254;
+	hw_res_y = (hw_res_y * 10 + 790) * 10 / 254;
+
 	pDevice->max_y = max_y;
 
 	csgesture_softc *sc = &pDevice->sc;
 	sprintf(sc->product_id, "%d.0", prodid);
 	sprintf(sc->firmware_version, "%d.0", version);
 
-	sc->resx = max_x;
+	pDevice->hw_res_x = hw_res_x;
+	pDevice->hw_res_y = hw_res_y;
+
+	/*sc->resx = max_x;
 	sc->resy = max_y;
 
 	sc->resx *= 2;
 	sc->resx /= 7;
-	
+
 	sc->resy *= 2;
-	sc->resy /= 7;
+	sc->resy /= 7;*/
 
-	sc->phyx = max_x / x_traces;
-	sc->phyy = max_y / y_traces;
+	sc->resx = max_x * 10 / hw_res_x;
+	sc->resy = max_y * 10 / hw_res_y;
 
-	ElanPrint(DEBUG_LEVEL_INFO, DBG_PNP, "[etp] ProdID: %d Vers: %d Csum: %d SmVers: %d IAPVers: %d Max X: %d Max Y: %d\n", prodid, version, csum, smvers, iapversion, max_x, max_y);
+	sc->phyx = max_x;
+	sc->phyy = max_y;
+
+	DbgPrint( "[etp] ProdID: %d Vers: %d Csum: %d SmVers: %d IAPVers: %d Max X: %d Max Y: %d X Traces: %d Y Traces: %d\n", prodid, version, csum, smvers, iapversion, max_x, max_y, x_traces, y_traces);
 
 	elan_i2c_write_cmd(pDevice, ETP_I2C_SET_CMD, ETP_ENABLE_CALIBRATE | ETP_ENABLE_ABS);
 
