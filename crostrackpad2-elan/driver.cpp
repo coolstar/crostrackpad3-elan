@@ -438,10 +438,13 @@ USHORT filterNegative(int val) {
 	return 65535;
 }
 
-bool ProcessMove(PDEVICE_CONTEXT pDevice, csgesture_softc *sc, int abovethreshold, int iToUse[3]) {
+bool ProcessMove(PDEVICE_CONTEXT pDevice, csgesture_softc *sc, int abovethreshold, int nfingers, int iToUse[3]) {
+
 	if (abovethreshold == 1 || sc->panningActive) {
 		int i = iToUse[0];
 		if (!sc->panningActive && sc->tick[i] < 5)
+			return false;
+		if (nfingers != 1 && sc->scrollingActive || nfingers != 1 && sc->scrollInertiaActive)
 			return false;
 
 		stop_scroll(pDevice);
@@ -861,7 +864,7 @@ bool ProcessThreeFingerSwipe(PDEVICE_CONTEXT pDevice, csgesture_softc *sc, int a
 	}
 }
 
-void TapToClickOrDrag(PDEVICE_CONTEXT pDevice, csgesture_softc *sc, int button) {
+void TapToClickOrDrag(PDEVICE_CONTEXT pDevice, csgesture_softc *sc, int button, int abovethreshold, int nfingers) {
 	if (!sc->settings.tapToClickEnabled)
 		return;
 	sc->tickssinceclick++;
@@ -889,9 +892,16 @@ void TapToClickOrDrag(PDEVICE_CONTEXT pDevice, csgesture_softc *sc, int button) 
 
 	int buttonmask = 0;
 
-	if (sc->scrollInertiaActive) {
-		stop_scroll(pDevice);
+	if (sc->scrollingActive)
 		return;
+
+	if (sc->scrollInertiaActive && !sc->scrollingActive) {
+		if (button == 1 && abovethreshold == 1 && nfingers == 1) {
+			stop_scroll(pDevice);
+			return;
+			}
+		else
+			return; 
 	}
 
 	switch (button) {
@@ -1013,7 +1023,7 @@ void ProcessGesture(PDEVICE_CONTEXT pDevice, csgesture_softc *sc) {
 	if (!handled)
 		handledByScroll = handled = ProcessScroll(pDevice, sc, abovethreshold, iToUse);
 	if (!handled)
-		handled = ProcessMove(pDevice, sc, abovethreshold, iToUse);
+		handled = ProcessMove(pDevice, sc, abovethreshold, nfingers, iToUse);
 
 #pragma mark process clickpad press state
 	int buttonmask = 0;
@@ -1161,7 +1171,7 @@ void ProcessGesture(PDEVICE_CONTEXT pDevice, csgesture_softc *sc) {
 
 #pragma mark process tap to click
 	if (!handledByScroll)
-		TapToClickOrDrag(pDevice, sc, releasedfingers);
+		TapToClickOrDrag(pDevice, sc, releasedfingers, abovethreshold, nfingers);
 
 #pragma mark send to system
 	update_relative_mouse(pDevice, sc->buttonmask, sc->dx, sc->dy, sc->scrolly, sc->scrollx);
